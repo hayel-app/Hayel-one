@@ -60,6 +60,28 @@ jobs:
             psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test -f "$f"
           done
 
+      - name: Create restricted application role
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hayel_app') THEN
+              CREATE ROLE hayel_app LOGIN PASSWORD 'ci-only-password';
+            END IF;
+          END $$;
+          ALTER ROLE hayel_app NOSUPERUSER NOBYPASSRLS;
+          GRANT USAGE ON SCHEMA public TO hayel_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON organizations, users, employees, employments TO hayel_app;
+          SQL
+
+      - name: Verify restricted role
+        env:
+          PGPASSWORD: ci-only-password
+        run: |
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U hayel_app -d hayel_test -c 'select current_user, current_setting('"'"'rolsuper'"'"') from pg_roles where rolname = current_user;'
+
       - name: Verify RLS metadata
         env:
           PGPASSWORD: postgres
@@ -73,5 +95,8 @@ jobs:
           ORDER BY c.relname;
           SQL
 
-      - name: Run persistence tests
-        run: pnpm test -- packages/persistence
+      - name: Run persistence tests with real PostgreSQL
+        env:
+          HAYEL_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/hayel_test
+          HAYEL_POSTGRES_APP_URL: postgresql://hayel_app:ci-only-password@127.0.0.1:5432/hayel_test
+        run: pnpm --filter @hayel/persistence test
