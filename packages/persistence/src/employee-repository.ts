@@ -1,6 +1,7 @@
-import type { EmployeeId } from "../../core-domain/src/identifiers.js";
 import { withTenantTransaction, type TransactionPool } from "./postgres-tenant-transaction.js";
 import type { TenantId } from "./tenant-session.js";
+
+export type EmployeeId = string;
 
 export interface EmployeeRecord {
   id: string;
