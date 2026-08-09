@@ -16,18 +16,18 @@ export async function withTenantTransaction<T>(
 ): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    await setTenantContext(client, tenantId);
-    const result = await work(client);
-    await clearTenantContext(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
     try {
+      await client.query("BEGIN");
+      await setTenantContext(client, tenantId);
+      const result = await work(client);
+      await clearTenantContext(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
       await client.query("ROLLBACK");
-    } finally {
-      client.release();
+      throw error;
     }
-    throw error;
+  } finally {
+    client.release();
   }
 }
