@@ -1,0 +1,17 @@
+{
+  "name": "hayel-one",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Hayel — AI-first Workforce Intelligence Platform",
+  "packageManager": "pnpm@10.12.4",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --recursive build",
+    "dev": "pnpm --parallel --recursive dev",
+    "lint": "pnpm --recursive lint",
+    "test": "pnpm --recursive test",
+    "typecheck": "pnpm --recursive typecheck"
+  }
+}
