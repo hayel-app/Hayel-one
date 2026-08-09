@@ -1,6 +1,6 @@
-import { clearTenantContext, setTenantContext, type SqlExecutor, type TenantId } from "./tenant-session.js";
+import { clearTenantContext, setTenantContext, type TenantId } from "./tenant-session.js";
 
-export interface TransactionClient extends SqlExecutor {
+export interface TransactionClient {
   query<T = unknown>(sql: string, params?: readonly unknown[]): Promise<{ rows: T[] }>;
   release(): void;
 }
@@ -29,7 +29,5 @@ export async function withTenantTransaction<T>(
       client.release();
     }
     throw error;
-  } finally {
-    client.release();
   }
 }
