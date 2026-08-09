@@ -29,6 +29,7 @@ export async function withTenantTransaction<T>(
       client.release();
     }
     throw error;
+  } finally {
+    client.release();
   }
-  // The pool client is released by the success path below.
 }
