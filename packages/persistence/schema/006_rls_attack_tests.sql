@@ -1,22 +1,22 @@
 -- Executable PostgreSQL RLS attack checks.
--- Run as a restricted role in CI after schema migrations.
+-- CI must execute this file as the postgres bootstrap role.
+-- Fixture creation occurs before SET LOCAL ROLE so both tenants exist.
 
 BEGIN;
-
-SET LOCAL ROLE hayel_app;
 
 INSERT INTO organizations (id, tenant_id, legal_name, country_code, currency_code, time_zone)
 VALUES
   ('00000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','Tenant A Org','EG','EGP','Africa/Cairo'),
   ('00000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000002','Tenant B Org','SA','SAR','Asia/Riyadh');
 
-SET LOCAL app.current_tenant_id = '10000000-0000-0000-0000-000000000001';
-
 INSERT INTO users (id, tenant_id, email)
 VALUES ('30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','a@example.test');
 
 INSERT INTO employees (id, tenant_id, organization_id, user_id, display_name)
 VALUES ('40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','Tenant A Employee');
+
+SET LOCAL ROLE hayel_app;
+SET LOCAL app.current_tenant_id = '10000000-0000-0000-0000-000000000001';
 
 DO $$
 BEGIN
@@ -25,13 +25,9 @@ BEGIN
   END IF;
 END $$;
 
--- Cross-tenant reads must be invisible.
 DO $$
 BEGIN
-  IF EXISTS (
-    SELECT 1 FROM employees
-    WHERE tenant_id = '20000000-0000-0000-0000-000000000002'
-  ) THEN
+  IF EXISTS (SELECT 1 FROM employees WHERE tenant_id = '20000000-0000-0000-0000-000000000002') THEN
     RAISE EXCEPTION 'Cross-tenant read isolation failed';
   END IF;
 END $$;
