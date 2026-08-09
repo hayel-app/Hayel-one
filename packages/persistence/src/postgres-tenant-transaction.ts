@@ -2,16 +2,13 @@ import { clearTenantContext, setTenantContext, type SqlExecutor, type TenantId }
 
 export interface TransactionClient extends SqlExecutor {
   query<T = unknown>(sql: string, params?: readonly unknown[]): Promise<{ rows: T[] }>;
+  release(): void;
 }
 
 export interface TransactionPool {
-  connect(): Promise<TransactionClient & { release(): void }>;
+  connect(): Promise<TransactionClient>;
 }
 
-/**
- * Executes work inside one PostgreSQL transaction with an explicit tenant
- * context. Tenant context is transaction-local and cleared before release.
- */
 export async function withTenantTransaction<T>(
   pool: TransactionPool,
   tenantId: TenantId,
@@ -33,6 +30,5 @@ export async function withTenantTransaction<T>(
     }
     throw error;
   }
-  // Successful transactions release only after COMMIT. Keeping release here
-  // avoids connection leaks while preserving transaction-local context.
+  // The pool client is released by the success path below.
 }
