@@ -1,0 +1,20 @@
+{
+  "name": "@hayel/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "dev": "node --watch dist/server.js"
+  },
+  "dependencies": {
+    "@hayel/persistence": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.2"
+  }
+}
