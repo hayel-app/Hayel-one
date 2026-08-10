@@ -31,18 +31,28 @@ const seed = async (admin: Pool) => {
   );
 };
 
-test("real PostgreSQL API enforces tenant isolation", async () => {
+test("real PostgreSQL API enforces tenant isolation", { timeout: 60_000 }, async () => {
   const admin = new Pool({ connectionString: adminUrl });
   const app = new Pool({ connectionString: appUrl });
   const server = createHayelServer(app);
-
-  await seed(admin);
-  await new Promise<void>((resolve, reject) => server.listen(0, "127.0.0.1", () => resolve()));
-  const address = server.address();
-  assert.ok(address && typeof address !== "string");
-  const base = `http://127.0.0.1:${address.port}`;
+  let listening = false;
 
   try {
+    await seed(admin);
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error) => reject(error);
+      server.once("error", onError);
+      server.listen(0, "127.0.0.1", () => {
+        server.off("error", onError);
+        listening = true;
+        resolve();
+      });
+    });
+
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+
     const missingTenant = await fetch(`${base}/api/v1/employees`);
     assert.equal(missingTenant.status, 400);
 
@@ -73,9 +83,14 @@ test("real PostgreSQL API enforces tenant isolation", async () => {
     });
     assert.equal(crossTenant.status, 404);
   } finally {
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    if (listening) {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
     await app.end();
-    await admin.query("TRUNCATE employments, employees, users, organizations CASCADE");
-    await admin.end();
+    try {
+      await admin.query("TRUNCATE employments, employees, users, organizations CASCADE");
+    } finally {
+      await admin.end();
+    }
   }
 });
