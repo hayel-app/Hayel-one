@@ -45,10 +45,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- pnpm-lock.yaml; then
-            echo "No lockfile change required."
+          git add pnpm-lock.yaml
+          if git diff --cached --quiet -- pnpm-lock.yaml; then
+            echo "Lockfile already committed and unchanged."
             exit 0
           fi
-          git add pnpm-lock.yaml
           git commit -m "chore: add deterministic pnpm lockfile"
           git push origin "HEAD:${TARGET_BRANCH}"
