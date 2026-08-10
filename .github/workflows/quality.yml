@@ -17,6 +17,7 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -36,10 +37,10 @@ jobs:
       HAYEL_APP_PASSWORD: hayel_ci_app_password
       HAYEL_POSTGRES_APP_URL: postgresql://hayel_app:hayel_ci_app_password@127.0.0.1:5432/hayel
     steps:
-      - name: Checkout
+      - name: Checkout triggering commit
         uses: actions/checkout@v4
         with:
-          ref: mu/foundation-v1
+          ref: ${{ github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
