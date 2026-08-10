@@ -1,22 +1,17 @@
 name: Hayel Quality
 
 on:
+  push:
+    branches: ['mu/foundation-v1']
   pull_request:
     branches: [main]
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Bootstrap pnpm lockfile"]
-    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   quality:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'mu/foundation-v1')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
