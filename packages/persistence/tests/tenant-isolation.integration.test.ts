@@ -9,13 +9,15 @@ if (!adminUrl || !appUrl) {
   throw new Error("SECURITY GATE MISCONFIGURED: HAYEL_POSTGRES_ADMIN_URL and HAYEL_POSTGRES_APP_URL are required; tenant isolation tests must never skip.");
 }
 
+const clientConfig = { connectionTimeoutMillis: 10_000, query_timeout: 10_000 };
+
 async function connect(url: string): Promise<Client> {
-  const client = new Client({ connectionString: url });
+  const client = new Client({ connectionString: url, ...clientConfig });
   await client.connect();
   return client;
 }
 
-test("real PostgreSQL tenant isolation attack suite", async (t) => {
+test("real PostgreSQL tenant isolation attack suite", { timeout: 60_000 }, async (t) => {
   const admin = await connect(adminUrl);
   const app = await connect(appUrl);
 
@@ -47,71 +49,74 @@ test("real PostgreSQL tenant isolation attack suite", async (t) => {
       assert.equal(role.rows.length, 1);
       assert.equal(role.rows[0]?.rolsuper, false);
       assert.equal(role.rows[0]?.rolbypassrls, false);
-
       const memberships = await admin.query(
-        `SELECT 1 FROM pg_auth_members m
-         JOIN pg_roles r ON r.oid = m.member
-         JOIN pg_roles parent ON parent.oid = m.roleid
-         WHERE r.rolname = 'hayel_app'`,
+        `SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member WHERE r.rolname = 'hayel_app'`,
       );
       assert.equal(memberships.rowCount, 0);
     });
 
     await t.test("Tenant A sees only Tenant A", async () => {
       await app.query("BEGIN");
-      await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
-      const result = await app.query<{ display_name: string }>("SELECT display_name FROM employees ORDER BY id");
-      assert.deepEqual(result.rows.map((row) => row.display_name), ["Employee A"]);
-      await app.query("ROLLBACK");
+      try {
+        await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
+        const result = await app.query<{ display_name: string }>("SELECT display_name FROM employees ORDER BY id");
+        assert.deepEqual(result.rows.map((row) => row.display_name), ["Employee A"]);
+      } finally { await app.query("ROLLBACK"); }
     });
 
     await t.test("Tenant A cannot read Tenant B by direct ID", async () => {
       await app.query("BEGIN");
-      await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
-      const result = await app.query("SELECT id FROM employees WHERE id = $1", ["00000000-0000-0000-0000-000000000022"]);
-      assert.equal(result.rowCount, 0);
-      await app.query("ROLLBACK");
+      try {
+        await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
+        const result = await app.query("SELECT id FROM employees WHERE id = $1", ["00000000-0000-0000-0000-000000000022"]);
+        assert.equal(result.rowCount, 0);
+      } finally { await app.query("ROLLBACK"); }
     });
 
     await t.test("Tenant A cannot create a Tenant B employee", async () => {
       await app.query("BEGIN");
-      await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
-      await assert.rejects(app.query(
-        "INSERT INTO employees (id, tenant_id, organization_id, display_name) VALUES ($1,$2,$3,$4)",
-        ["00000000-0000-0000-0000-000000000033", "20000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000002", "Attack"],
-      ));
-      await app.query("ROLLBACK");
+      try {
+        await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
+        await assert.rejects(app.query(
+          "INSERT INTO employees (id, tenant_id, organization_id, display_name) VALUES ($1,$2,$3,$4)",
+          ["00000000-0000-0000-0000-000000000033", "20000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000002", "Attack"],
+        ));
+      } finally { await app.query("ROLLBACK"); }
     });
 
     await t.test("Tenant A cannot update Tenant B", async () => {
       await app.query("BEGIN");
-      await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
-      const result = await app.query("UPDATE employees SET display_name = 'HACKED' WHERE id = $1 RETURNING id", ["00000000-0000-0000-0000-000000000022"]);
-      assert.equal(result.rowCount, 0);
-      await app.query("ROLLBACK");
+      try {
+        await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
+        const result = await app.query("UPDATE employees SET display_name = 'HACKED' WHERE id = $1 RETURNING id", ["00000000-0000-0000-0000-000000000022"]);
+        assert.equal(result.rowCount, 0);
+      } finally { await app.query("ROLLBACK"); }
     });
 
     await t.test("Tenant A cannot delete Tenant B", async () => {
       await app.query("BEGIN");
-      await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
-      const result = await app.query("DELETE FROM employees WHERE id = $1 RETURNING id", ["00000000-0000-0000-0000-000000000022"]);
-      assert.equal(result.rowCount, 0);
-      await app.query("ROLLBACK");
+      try {
+        await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
+        const result = await app.query("DELETE FROM employees WHERE id = $1 RETURNING id", ["00000000-0000-0000-0000-000000000022"]);
+        assert.equal(result.rowCount, 0);
+      } finally { await app.query("ROLLBACK"); }
     });
 
     await t.test("manipulated tenant identifier cannot expose Tenant B", async () => {
       await app.query("BEGIN");
-      await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
-      const result = await app.query("SELECT id FROM employees WHERE tenant_id = $1", ["20000000-0000-0000-0000-000000000002"]);
-      assert.equal(result.rowCount, 0);
-      await app.query("ROLLBACK");
+      try {
+        await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
+        const result = await app.query("SELECT id FROM employees WHERE tenant_id = $1", ["20000000-0000-0000-0000-000000000002"]);
+        assert.equal(result.rowCount, 0);
+      } finally { await app.query("ROLLBACK"); }
     });
 
     await t.test("missing tenant context fails closed", async () => {
       await app.query("BEGIN");
-      const result = await app.query("SELECT id FROM employees");
-      assert.equal(result.rowCount, 0);
-      await app.query("ROLLBACK");
+      try {
+        const result = await app.query("SELECT id FROM employees");
+        assert.equal(result.rowCount, 0);
+      } finally { await app.query("ROLLBACK"); }
     });
 
     await t.test("connection contamination is impossible across transactions", async () => {
@@ -120,12 +125,10 @@ test("real PostgreSQL tenant isolation attack suite", async (t) => {
       const a = await app.query("SELECT display_name FROM employees ORDER BY id");
       assert.deepEqual(a.rows.map((r) => r.display_name), ["Employee A"]);
       await app.query("COMMIT");
-
       await app.query("BEGIN");
       const withoutContext = await app.query("SELECT display_name FROM employees ORDER BY id");
       assert.equal(withoutContext.rowCount, 0);
       await app.query("ROLLBACK");
-
       await app.query("BEGIN");
       await app.query("select set_config('app.current_tenant_id', $1, true)", ["20000000-0000-0000-0000-000000000002"]);
       const b = await app.query("SELECT display_name FROM employees ORDER BY id");
@@ -137,7 +140,6 @@ test("real PostgreSQL tenant isolation attack suite", async (t) => {
       await app.query("BEGIN");
       await app.query("select set_config('app.current_tenant_id', $1, true)", ["10000000-0000-0000-0000-000000000001"]);
       await app.query("ROLLBACK");
-
       await app.query("BEGIN");
       const result = await app.query("SELECT id FROM employees");
       assert.equal(result.rowCount, 0);
