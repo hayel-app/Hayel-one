@@ -118,8 +118,11 @@ jobs:
           END $$;
           SQL
 
-      - name: Run persistence tests with real PostgreSQL
+      - name: Run persistence unit tests
+        run: pnpm --filter @hayel/persistence test
+
+      - name: Run real PostgreSQL tenant-isolation attack suite
         env:
           HAYEL_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/hayel_test
           HAYEL_POSTGRES_APP_URL: postgresql://hayel_app:ci-only-password@127.0.0.1:5432/hayel_test
-        run: pnpm --filter @hayel/persistence test
+        run: pnpm --filter @hayel/persistence test:integration
