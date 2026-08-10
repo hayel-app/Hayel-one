@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { EmployeeRepository } from "@hayel/persistence/employee-repository.js";
+import { EmploymentRepository } from "@hayel/persistence/employment-repository.js";
 import { OrganizationRepository } from "@hayel/persistence/organization-repository.js";
 import type { TransactionPool } from "@hayel/persistence/postgres-tenant-transaction.js";
 
@@ -17,6 +18,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
 export function createHayelServer(pool: TransactionPool) {
   const organizations = new OrganizationRepository(pool);
   const employees = new EmployeeRepository(pool);
+  const employments = new EmploymentRepository(pool);
 
   return createServer(async (request, response) => {
     const tenant = tenantId(request);
@@ -33,6 +35,12 @@ export function createHayelServer(pool: TransactionPool) {
 
       if (request.method === "GET" && request.url === "/api/v1/employees") {
         json(response, 200, { data: await employees.list(tenant) });
+        return;
+      }
+
+      const employmentMatch = request.url?.match(/^\/api\/v1\/employees\/([^/]+)\/employments$/);
+      if (request.method === "GET" && employmentMatch) {
+        json(response, 200, { data: await employments.listByEmployee(tenant, employmentMatch[1]!) });
         return;
       }
 
