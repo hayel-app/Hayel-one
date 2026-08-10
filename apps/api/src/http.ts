@@ -5,13 +5,20 @@ import { EmploymentRepository } from "@hayel/persistence/employment-repository.j
 import { OrganizationRepository } from "@hayel/persistence/organization-repository.js";
 import type { TransactionPool } from "@hayel/persistence/postgres-tenant-transaction.js";
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function tenantId(request: IncomingMessage): string | null {
   const value = request.headers["x-tenant-id"];
-  return typeof value === "string" && value.trim() ? value : null;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return UUID_PATTERN.test(normalized) ? normalized : null;
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { "content-type": "application/json" });
+  response.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+  });
   response.end(JSON.stringify(body));
 }
 
