@@ -17,6 +17,7 @@ CREATE TABLE users (
   email text NOT NULL,
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, id),
   UNIQUE (tenant_id, email)
 );
 
@@ -31,6 +32,7 @@ CREATE TABLE employees (
   manager_employee_id uuid,
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, id),
   CONSTRAINT employees_organization_fk
     FOREIGN KEY (tenant_id, organization_id)
     REFERENCES organizations (tenant_id, id),
