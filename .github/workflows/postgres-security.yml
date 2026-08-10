@@ -1,16 +1,22 @@
 name: Hayel PostgreSQL Security
 
 on:
-  push:
-    branches: [main, 'mu/**']
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Bootstrap pnpm lockfile"]
+    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   postgres-security:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'mu/foundation-v1')
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,6 +36,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -44,7 +52,7 @@ jobs:
           cache: pnpm
 
       - name: Verify lockfile exists
-        run: test -f pnpm-lock.yaml
+        run: test -s pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
