@@ -5,7 +5,8 @@ import { EmployeeRepository } from "./employee-repository.js";
 class FakeClient {
   queries: Array<{ sql: string; params?: readonly unknown[] }> = [];
   async query<T = unknown>(sql: string, params?: readonly unknown[]) {
-    this.queries.push({ sql, params });
+    if (params === undefined) this.queries.push({ sql });
+    else this.queries.push({ sql, params });
     return { rows: [] as T[] };
   }
   release() {}
