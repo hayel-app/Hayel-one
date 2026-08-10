@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
+    "migrate": "node scripts/migrate.mjs",
     "test": "tsc -p tsconfig.test.json && node --test dist-test/src/*.test.js",
     "test:integration": "tsc -p tsconfig.test.json && node --test dist-test/tests/*.test.js",
     "typecheck": "tsc --noEmit"
