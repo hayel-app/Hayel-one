@@ -3,8 +3,12 @@ import { createApiClient, type Employee, type Employment } from "./api.js";
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Hayel app root not found");
 
-const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-const tenantId = import.meta.env.VITE_TENANT_ID ?? "";
+function metaContent(name: string): string {
+  return document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content?.trim() ?? "";
+}
+
+const apiBase = metaContent("hayel-api-url") || "http://localhost:3000";
+const tenantId = metaContent("hayel-tenant-id");
 const client = createApiClient(apiBase, tenantId);
 
 app.innerHTML = `<main class="shell"><header class="topbar"><div class="brand">HAYEL</div><div class="workspace">Workforce Intelligence</div></header><section class="content"><div id="view"></div></section></main>`;
@@ -29,7 +33,8 @@ function renderPeople(): void {
     state.textContent = filtered.length ? "" : (employees.length ? "No people match your search." : "No employees found.");
     list.replaceChildren(...filtered.map((employee) => {
       const row = document.createElement("button");
-      row.type = "button"; row.className = "person";
+      row.type = "button";
+      row.className = "person";
       row.innerHTML = `<span><strong></strong><small></small></span><span class="status"></span>`;
       row.querySelector("strong")!.textContent = employee.display_name;
       row.querySelector("small")!.textContent = employee.id;
@@ -40,7 +45,9 @@ function renderPeople(): void {
   };
   const load = async () => {
     if (!tenantId) { state.hidden = false; state.textContent = "Tenant context is not configured."; list.replaceChildren(); return; }
-    state.hidden = false; state.textContent = "Loading employees…"; list.replaceChildren();
+    state.hidden = false;
+    state.textContent = "Loading employees…";
+    list.replaceChildren();
     try { employees = await client.listEmployees(); render(); }
     catch { state.hidden = false; state.textContent = "Unable to load employees. Check the API connection."; }
   };
