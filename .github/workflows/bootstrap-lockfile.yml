@@ -1,6 +1,8 @@
 name: Bootstrap pnpm lockfile
 
 on:
+  push:
+    branches: ['mu/foundation-v1']
   workflow_dispatch:
     inputs:
       branch:
@@ -19,7 +21,7 @@ jobs:
       - name: Checkout target branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -40,8 +42,6 @@ jobs:
         run: test -s pnpm-lock.yaml
 
       - name: Commit lockfile
-        env:
-          TARGET_BRANCH: ${{ inputs.branch }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -51,4 +51,4 @@ jobs:
             exit 0
           fi
           git commit -m "chore: add deterministic pnpm lockfile"
-          git push origin "HEAD:${TARGET_BRANCH}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
