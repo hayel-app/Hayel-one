@@ -1,4 +1,4 @@
-import { createApiClient, type Employee } from "./api.js";
+import { createApiClient, type Employee, type Employment } from "./api.js";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Hayel app root not found");
@@ -26,6 +26,7 @@ function renderPeople(): void {
     const filtered = employees.filter((e) => `${e.display_name} ${e.id}`.toLowerCase().includes(term));
     count.textContent = `${filtered.length} people`;
     state.hidden = filtered.length > 0;
+    state.textContent = filtered.length ? "" : (employees.length ? "No people match your search." : "No employees found.");
     list.replaceChildren(...filtered.map((employee) => {
       const row = document.createElement("button");
       row.type = "button"; row.className = "person";
@@ -38,9 +39,10 @@ function renderPeople(): void {
     }));
   };
   const load = async () => {
-    if (!tenantId) { state.textContent = "Tenant context is not configured."; return; }
+    if (!tenantId) { state.hidden = false; state.textContent = "Tenant context is not configured."; list.replaceChildren(); return; }
+    state.hidden = false; state.textContent = "Loading employees…"; list.replaceChildren();
     try { employees = await client.listEmployees(); render(); }
-    catch { state.textContent = "Unable to load employees. Check the API connection."; }
+    catch { state.hidden = false; state.textContent = "Unable to load employees. Check the API connection."; }
   };
   search.addEventListener("input", render);
   document.querySelector<HTMLButtonElement>("#refresh")!.addEventListener("click", () => void load());
@@ -48,19 +50,35 @@ function renderPeople(): void {
 }
 
 async function renderEmployee(id: string): Promise<void> {
-  renderShell("Employee", "Employee profile and workforce context.", `<button id="back" type="button">← Back to People</button><div id="profile" class="card profile"><div class="empty">Loading profile…</div></div>`);
+  renderShell("Employee", "Employee profile and workforce context.", `<button id="back" class="secondary" type="button">← Back to People</button><div id="profile" class="card profile"><div class="empty">Loading profile…</div></div>`);
   document.querySelector<HTMLButtonElement>("#back")!.addEventListener("click", () => { location.hash = ""; });
   const profile = document.querySelector<HTMLDivElement>("#profile")!;
   try {
-    const employee = await client.getEmployee(id);
+    const [employee, employmentResult] = await Promise.all([client.getEmployee(id), client.listEmployments(id)]);
     if (!employee) { profile.innerHTML = `<div class="empty">Employee not found.</div>`; return; }
-    profile.innerHTML = `<div class="profile-head"><div><div class="eyebrow">EMPLOYEE</div><h2></h2><p class="muted"></p></div><span class="status"></span></div><dl><div><dt>Employee ID</dt><dd></dd></div><div><dt>Organization</dt><dd></dd></div><div><dt>Department</dt><dd></dd></div><div><dt>Position</dt><dd></dd></div><div><dt>Manager</dt><dd></dd></div></dl>`;
+    profile.innerHTML = `<div class="profile-head"><div><div class="eyebrow">EMPLOYEE</div><h2></h2><p class="muted"></p></div><span class="status"></span></div><dl><div><dt>Employee ID</dt><dd></dd></div><div><dt>Organization</dt><dd></dd></div><div><dt>Department</dt><dd></dd></div><div><dt>Position</dt><dd></dd></div><div><dt>Manager</dt><dd></dd></div></dl><section class="employment"><div class="section-head"><div><div class="eyebrow">WORK HISTORY</div><h3>Employment history</h3></div><span class="muted"></span></div><div id="employment-list"></div></section>`;
     const values = profile.querySelectorAll("dd");
     profile.querySelector("h2")!.textContent = employee.display_name;
     profile.querySelector("p")!.textContent = employee.user_id ?? "No linked user account";
     profile.querySelector(".status")!.textContent = employee.active ? "Active" : "Inactive";
     [employee.id, employee.organization_id, employee.department_id ?? "—", employee.position_id ?? "—", employee.manager_employee_id ?? "—"].forEach((value, i) => { values[i]!.textContent = value; });
-  } catch { profile.innerHTML = `<div class="empty">Unable to load employee profile.</div>`; }
+    profile.querySelector(".section-head .muted")!.textContent = `${employmentResult.length} record${employmentResult.length === 1 ? "" : "s"}`;
+    const employmentList = profile.querySelector<HTMLDivElement>("#employment-list")!;
+    if (!employmentResult.length) {
+      employmentList.innerHTML = `<div class="empty compact">No employment history recorded.</div>`;
+      return;
+    }
+    employmentList.replaceChildren(...employmentResult.map((employment: Employment) => {
+      const item = document.createElement("article");
+      item.className = "employment-row";
+      const end = employment.end_date ?? "Present";
+      item.innerHTML = `<div><strong></strong><small></small></div><span class="status"></span>`;
+      item.querySelector("strong")!.textContent = employment.status;
+      item.querySelector("small")!.textContent = `${employment.start_date} → ${end}`;
+      item.querySelector(".status")!.textContent = employment.organization_id === employee.organization_id ? "Current organization" : "Other organization";
+      return item;
+    }));
+  } catch { profile.innerHTML = `<div class="empty">Unable to load employee profile and employment history.</div>`; }
 }
 
 function route(): void {
@@ -70,7 +88,7 @@ function route(): void {
 }
 
 const style = document.createElement("style");
-style.textContent = `:root{font-family:Inter,system-ui,sans-serif;color:#111;background:#f7f7f5}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh}.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;background:#fff;border-bottom:1px solid #e8e8e8}.brand{font-weight:900;letter-spacing:.12em}.workspace{color:#666;font-size:14px}.content{max-width:1200px;margin:auto;padding:56px 32px}.eyebrow{font-size:12px;font-weight:800;letter-spacing:.14em;color:#666}h1{margin:8px 0;font-size:42px}h2{font-size:28px;margin:8px 0}.subtitle{color:#666;margin-bottom:32px}.toolbar{display:flex;gap:12px;margin-bottom:20px}input{flex:1;padding:12px 14px;border:1px solid #ddd;border-radius:8px;font:inherit}button{border:0;border-radius:8px;padding:12px 18px;background:#111;color:#fff;font-weight:700}.card{background:#fff;border:1px solid #e6e6e6;border-radius:12px;overflow:hidden}.card-head{padding:18px 20px;display:flex;justify-content:space-between;border-bottom:1px solid #eee;font-weight:700}.muted{color:#777;font-weight:400}.empty{padding:64px 20px;text-align:center;color:#777}.list{display:grid}.person{width:100%;display:flex;justify-content:space-between;text-align:left;padding:18px 20px;border:0;border-bottom:1px solid #eee;border-radius:0;background:#fff;color:#111}.person:hover{background:#f7f7f5}.person strong,.person small{display:block}.person small{color:#777;margin-top:4px}.status{font-size:12px;font-weight:700}.profile{margin-top:24px;padding:28px}.profile-head{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:24px}dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin:28px 0 0}dt{font-size:12px;color:#777;margin-bottom:6px}dd{margin:0;font-weight:600}`;
+style.textContent = `:root{font-family:Inter,system-ui,sans-serif;color:#111;background:#f7f7f5}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh}.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;background:#fff;border-bottom:1px solid #e8e8e8}.brand{font-weight:900;letter-spacing:.12em}.workspace{color:#666;font-size:14px}.content{max-width:1200px;margin:auto;padding:56px 32px}.eyebrow{font-size:12px;font-weight:800;letter-spacing:.14em;color:#666}h1{margin:8px 0;font-size:42px}h2{font-size:28px;margin:8px 0}h3{font-size:20px;margin:6px 0}.subtitle{color:#666;margin-bottom:32px}.toolbar{display:flex;gap:12px;margin-bottom:20px}input{flex:1;padding:12px 14px;border:1px solid #ddd;border-radius:8px;font:inherit}button{border:0;border-radius:8px;padding:12px 18px;background:#111;color:#fff;font-weight:700}.secondary{background:#fff;color:#111;border:1px solid #ddd}.card{background:#fff;border:1px solid #e6e6e6;border-radius:12px;overflow:hidden}.card-head{padding:18px 20px;display:flex;justify-content:space-between;border-bottom:1px solid #eee;font-weight:700}.muted{color:#777;font-weight:400}.empty{padding:64px 20px;text-align:center;color:#777}.empty.compact{padding:32px 20px}.list{display:grid}.person{width:100%;display:flex;justify-content:space-between;text-align:left;padding:18px 20px;border:0;border-bottom:1px solid #eee;border-radius:0;background:#fff;color:#111}.person:hover{background:#f7f7f5}.person strong,.person small{display:block}.person small{color:#777;margin-top:4px}.status{font-size:12px;font-weight:700}.profile{margin-top:24px;padding:28px}.profile-head{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:24px}dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin:28px 0 0}dt{font-size:12px;color:#777;margin-bottom:6px}dd{margin:0;font-weight:600}.employment{margin-top:36px;padding-top:28px;border-top:1px solid #eee}.section-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}.employment-row{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-top:1px solid #eee}.employment-row strong,.employment-row small{display:block}.employment-row small{color:#777;margin-top:5px}@media(max-width:700px){.topbar{padding:0 18px}.content{padding:36px 18px}h1{font-size:34px}dl{grid-template-columns:1fr}.employment-row{gap:16px;align-items:flex-start}}`;
 document.head.appendChild(style);
 window.addEventListener("hashchange", route);
 route();
