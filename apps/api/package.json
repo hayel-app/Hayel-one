@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "node --test",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/*.test.js",
     "typecheck": "tsc --noEmit",
     "dev": "node --watch dist/server.js"
   },
