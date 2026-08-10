@@ -17,13 +17,38 @@ class FakePool {
   }
 }
 
-test("API rejects requests without tenant context", async () => {
+async function startServer() {
   const server = createHayelServer(new FakePool());
-  await new Promise<void>((resolve) => server.listen(0, resolve));
+  await new Promise<void>((resolve, reject) => server.listen(0, "127.0.0.1", (error) => (error ? reject(error) : resolve())));
   const address = server.address();
   assert.ok(address && typeof address !== "string");
-  const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/employees`);
-  assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: "tenant_context_required" });
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return { server, base: `http://127.0.0.1:${address.port}` };
+}
+
+async function stopServer(server: ReturnType<typeof createHayelServer>) {
+  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+}
+
+test("API rejects requests without tenant context", async () => {
+  const { server, base } = await startServer();
+  try {
+    const response = await fetch(`${base}/api/v1/employees`);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "tenant_context_required" });
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test("API rejects malformed tenant context", async () => {
+  const { server, base } = await startServer();
+  try {
+    const response = await fetch(`${base}/api/v1/employees`, {
+      headers: { "x-tenant-id": "tenant-a" },
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "tenant_context_required" });
+  } finally {
+    await stopServer(server);
+  }
 });
