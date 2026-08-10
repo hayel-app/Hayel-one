@@ -10,9 +10,20 @@ export interface Employee {
   active: boolean;
 }
 
+export interface Employment {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  organization_id: string;
+  status: string;
+  start_date: string;
+  end_date: string | null;
+}
+
 export interface HayelApiClient {
   listEmployees(): Promise<Employee[]>;
   getEmployee(id: string): Promise<Employee | null>;
+  listEmployments(employeeId: string): Promise<Employment[]>;
 }
 
 export function createApiClient(baseUrl: string, tenantId: string): HayelApiClient {
@@ -35,6 +46,10 @@ export function createApiClient(baseUrl: string, tenantId: string): HayelApiClie
         if (error instanceof Error && error.message.endsWith(": 404")) return null;
         throw error;
       }
+    },
+    async listEmployments(employeeId: string) {
+      const body = await request<{ data: Employment[] }>(`/api/v1/employees/${encodeURIComponent(employeeId)}/employments`);
+      return body.data;
     },
   };
 }
