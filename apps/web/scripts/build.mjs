@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -21,8 +21,6 @@ await new Promise((resolve, reject) => {
 });
 
 const index = await readFile(join(appDir, "index.html"), "utf8");
-const productionIndex = index
-  .replace('/src/main.ts', '/main.js')
-  .replace(/<!-- BUILD:.*?-->/g, "");
+const productionIndex = index.replace('/src/main.ts', '/main.js');
 await writeFile(join(distDir, "index.html"), productionIndex, "utf8");
 await writeFile(join(distDir, ".gitignore"), "*\n!.gitignore\n", "utf8");
