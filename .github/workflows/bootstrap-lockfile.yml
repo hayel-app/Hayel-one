@@ -35,20 +35,27 @@ jobs:
         with:
           node-version: 22
 
+      - name: Check lockfile
+        id: lockfile
+        run: |
+          if test -s pnpm-lock.yaml; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate lockfile
+        if: steps.lockfile.outputs.present != 'true'
         run: pnpm install --lockfile-only
 
       - name: Verify lockfile
         run: test -s pnpm-lock.yaml
 
       - name: Commit lockfile
+        if: steps.lockfile.outputs.present != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pnpm-lock.yaml
-          if git diff --cached --quiet -- pnpm-lock.yaml; then
-            echo "Lockfile already committed and unchanged."
-            exit 0
-          fi
           git commit -m "chore: add deterministic pnpm lockfile"
           git push origin "HEAD:${GITHUB_REF_NAME}"
