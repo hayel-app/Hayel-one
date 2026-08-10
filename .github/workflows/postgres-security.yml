@@ -37,7 +37,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: mu/foundation-v1
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -98,22 +98,11 @@ jobs:
             bypassrls_flag boolean;
             membership_count integer;
           BEGIN
-            SELECT rolsuper, rolbypassrls
-              INTO superuser_flag, bypassrls_flag
-              FROM pg_roles WHERE rolname = 'hayel_app';
-            IF superuser_flag IS DISTINCT FROM false THEN
-              RAISE EXCEPTION 'hayel_app must be NOSUPERUSER';
-            END IF;
-            IF bypassrls_flag IS DISTINCT FROM false THEN
-              RAISE EXCEPTION 'hayel_app must be NOBYPASSRLS';
-            END IF;
-            SELECT count(*) INTO membership_count
-              FROM pg_auth_members m
-              JOIN pg_roles r ON r.oid = m.member
-              WHERE r.rolname = 'hayel_app';
-            IF membership_count <> 0 THEN
-              RAISE EXCEPTION 'hayel_app has unexpected role memberships: %', membership_count;
-            END IF;
+            SELECT rolsuper, rolbypassrls INTO superuser_flag, bypassrls_flag FROM pg_roles WHERE rolname = 'hayel_app';
+            IF superuser_flag IS DISTINCT FROM false THEN RAISE EXCEPTION 'hayel_app must be NOSUPERUSER'; END IF;
+            IF bypassrls_flag IS DISTINCT FROM false THEN RAISE EXCEPTION 'hayel_app must be NOBYPASSRLS'; END IF;
+            SELECT count(*) INTO membership_count FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member WHERE r.rolname = 'hayel_app';
+            IF membership_count <> 0 THEN RAISE EXCEPTION 'hayel_app has unexpected role memberships: %', membership_count; END IF;
           END $$;
           SQL
 
@@ -123,15 +112,12 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test <<'SQL'
           DO $$
-          DECLARE
-            table_name text;
-            rls_enabled boolean;
-            rls_forced boolean;
+          DECLARE table_name text; rls_enabled boolean; rls_forced boolean;
           BEGIN
             FOREACH table_name IN ARRAY ARRAY['organizations','users','employees','employments'] LOOP
               SELECT relrowsecurity, relforcerowsecurity INTO rls_enabled, rls_forced
-                FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-                WHERE n.nspname = 'public' AND c.relname = table_name;
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relname = table_name;
               IF rls_enabled IS DISTINCT FROM true OR rls_forced IS DISTINCT FROM true THEN
                 RAISE EXCEPTION 'RLS is not enabled and forced for %', table_name;
               END IF;
