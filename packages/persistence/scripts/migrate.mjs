@@ -35,7 +35,8 @@ try {
   const appPassword = process.env.HAYEL_APP_PASSWORD;
   if (appPassword) {
     await client.query("ALTER ROLE hayel_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS");
-    await client.query(`ALTER ROLE hayel_app PASSWORD '${appPassword.replaceAll("'", "''")}'`);
+    const passwordSql = (await client.query("SELECT format('ALTER ROLE hayel_app PASSWORD %L', $1) AS sql", [appPassword])).rows[0].sql;
+    await client.query(passwordSql);
   }
 
   await client.query("COMMIT");
