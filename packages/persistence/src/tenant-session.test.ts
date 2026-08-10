@@ -5,7 +5,11 @@ import { clearTenantContext, setTenantContext, type SqlExecutor } from "./tenant
 class FakeDb implements SqlExecutor {
   calls: Array<{ sql: string; params?: readonly unknown[] }> = [];
   async query<T = unknown>(sql: string, params?: readonly unknown[]) {
-    this.calls.push({ sql, params });
+    if (params === undefined) {
+      this.calls.push({ sql });
+    } else {
+      this.calls.push({ sql, params });
+    }
     return { rows: [] as T[] };
   }
 }
