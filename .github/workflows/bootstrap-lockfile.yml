@@ -1,0 +1,54 @@
+name: Bootstrap pnpm lockfile
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to bootstrap
+        required: true
+        default: mu/foundation-v1
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate lockfile
+        run: pnpm install --lockfile-only
+
+      - name: Verify lockfile
+        run: test -s pnpm-lock.yaml
+
+      - name: Commit lockfile
+        env:
+          TARGET_BRANCH: ${{ inputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "No lockfile change required."
+            exit 0
+          fi
+          git add pnpm-lock.yaml
+          git commit -m "chore: add deterministic pnpm lockfile"
+          git push origin "HEAD:${TARGET_BRANCH}"
