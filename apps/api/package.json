@@ -11,10 +11,12 @@
     "dev": "node --watch dist/server.js"
   },
   "dependencies": {
-    "@hayel/persistence": "workspace:*"
+    "@hayel/persistence": "workspace:*",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/pg": "^8.15.5",
     "typescript": "^5.9.2"
   }
 }
