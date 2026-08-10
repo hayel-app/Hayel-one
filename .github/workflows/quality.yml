@@ -13,6 +13,24 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hayel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hayel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/hayel
+      HAYEL_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/hayel
+      HAYEL_APP_PASSWORD: hayel_ci_app_password
+      HAYEL_POSTGRES_APP_URL: postgresql://hayel_app:hayel_ci_app_password@127.0.0.1:5432/hayel
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +54,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Migrate PostgreSQL
+        run: pnpm --filter @hayel/persistence migrate
+
+      - name: Verify database security boundary
+        run: |
+          psql "$HAYEL_POSTGRES_ADMIN_URL" -v ON_ERROR_STOP=1 -c "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'hayel_app';"
+          psql "$HAYEL_POSTGRES_ADMIN_URL" -v ON_ERROR_STOP=1 -c "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname IN ('organizations','users','employees','employments') ORDER BY relname;"
 
       - name: Typecheck
         run: pnpm typecheck
