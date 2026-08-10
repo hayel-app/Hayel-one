@@ -1,0 +1,125 @@
+name: Hayel PostgreSQL Security Foundation
+
+on:
+  push:
+    branches: ['mu/foundation-v1']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-security:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hayel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hayel_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: mu/foundation-v1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Verify lockfile exists
+        run: test -s pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify PostgreSQL
+        env:
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test -c 'select version();'
+
+      - name: Run persistence migrations
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for f in packages/persistence/schema/*.sql; do
+            echo "Applying $f"
+            psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test -f "$f"
+          done
+
+      - name: Create restricted application role
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hayel_app') THEN
+              CREATE ROLE hayel_app LOGIN PASSWORD 'ci-only-password';
+            END IF;
+          END $$;
+          ALTER ROLE hayel_app NOSUPERUSER NOBYPASSRLS;
+          GRANT USAGE ON SCHEMA public TO hayel_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON organizations, users, employees, employments TO hayel_app;
+          SQL
+
+      - name: Assert restricted role at runtime
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test <<'SQL'
+          DO $$
+          DECLARE
+            superuser_flag boolean;
+            bypassrls_flag boolean;
+            membership_count integer;
+          BEGIN
+            SELECT rolsuper, rolbypassrls INTO superuser_flag, bypassrls_flag FROM pg_roles WHERE rolname = 'hayel_app';
+            IF superuser_flag IS DISTINCT FROM false THEN RAISE EXCEPTION 'hayel_app must be NOSUPERUSER'; END IF;
+            IF bypassrls_flag IS DISTINCT FROM false THEN RAISE EXCEPTION 'hayel_app must be NOBYPASSRLS'; END IF;
+            SELECT count(*) INTO membership_count FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member WHERE r.rolname = 'hayel_app';
+            IF membership_count <> 0 THEN RAISE EXCEPTION 'hayel_app has unexpected role memberships: %', membership_count; END IF;
+          END $$;
+          SQL
+
+      - name: Verify RLS metadata
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d hayel_test <<'SQL'
+          DO $$
+          DECLARE table_name text; rls_enabled boolean; rls_forced boolean;
+          BEGIN
+            FOREACH table_name IN ARRAY ARRAY['organizations','users','employees','employments'] LOOP
+              SELECT relrowsecurity, relforcerowsecurity INTO rls_enabled, rls_forced
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relname = table_name;
+              IF rls_enabled IS DISTINCT FROM true OR rls_forced IS DISTINCT FROM true THEN
+                RAISE EXCEPTION 'RLS is not enabled and forced for %', table_name;
+              END IF;
+            END LOOP;
+          END $$;
+          SQL
+
+      - name: Run persistence tests with real PostgreSQL
+        env:
+          HAYEL_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/hayel_test
+          HAYEL_POSTGRES_APP_URL: postgresql://hayel_app:ci-only-password@127.0.0.1:5432/hayel_test
+        run: pnpm --filter @hayel/persistence test
