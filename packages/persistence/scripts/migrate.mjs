@@ -20,7 +20,7 @@ await client.connect();
 try {
   await client.query("BEGIN");
   await client.query(`CREATE TABLE IF NOT EXISTS hayel_schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-  const appliedRows = await client.query<{ version: string }>("SELECT version FROM hayel_schema_migrations ORDER BY version");
+  const appliedRows = await client.query("SELECT version FROM hayel_schema_migrations ORDER BY version");
   const applied = new Set(appliedRows.rows.map((r) => r.version));
 
   for (const file of files) {
@@ -30,6 +30,12 @@ try {
     console.log(`applying ${file}`);
     await client.query(sql);
     await client.query("INSERT INTO hayel_schema_migrations(version) VALUES($1)", [file]);
+  }
+
+  const appPassword = process.env.HAYEL_APP_PASSWORD;
+  if (appPassword) {
+    await client.query("ALTER ROLE hayel_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS");
+    await client.query(`ALTER ROLE hayel_app PASSWORD '${appPassword.replaceAll("'", "''")}'`);
   }
 
   await client.query("COMMIT");
